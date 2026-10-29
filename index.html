@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFT — карты лута и выходов (реальные изображения)</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: #14181d;
+  color: #d5dde5;
+  line-height: 1.45;
+}
+button, input, select { font: inherit; }
+.container { width: min(1280px, 100% - 28px); margin: 0 auto; }
+
+.page-header {
+  background: linear-gradient(135deg, #1f2a1a, #3b4a2e);
+  color: #e8e2d0;
+  padding: 22px 0 18px;
+  border-bottom: 3px solid #6b7d4a;
+}
+.page-header h1 { margin: 2px 0 6px; font-size: clamp(1.5rem, 3.5vw, 2.3rem); letter-spacing: .02em; }
+.eyebrow { margin: 0; text-transform: uppercase; letter-spacing: .18em; font-size: .7rem; opacity: .7; }
+.subtitle { margin: 0 0 10px; max-width: 70ch; font-size: .95rem; }
+.demo-note {
+  max-width: 80ch; margin: 0; padding: 9px 12px; border-radius: 8px;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
+  font-size: .85rem;
+}
+
+.app-message {
+  min-height: 1.4em; margin: 12px 0 0; padding: 8px 12px; border-radius: 8px;
+  font-weight: 600; font-size: .9rem;
+}
+.app-message:empty { display: none; }
+.app-message.is-ok   { background: #1f3d24; color: #b8e6b2; border: 1px solid #3d6b45; }
+.app-message.is-err  { background: #3d1f1f; color: #f2b8b8; border: 1px solid #6b3d3d; }
+.app-message.is-info { background: #1f2f3d; color: #b2d4f2; border: 1px solid #3d566b; }
+
+/* ---------- Map tabs ---------- */
+.map-tabs {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 12px;
+}
+.map-tab {
+  padding: 9px 16px; border: 2px solid #3d4a3a; border-radius: 10px;
+  background: #1d241f; color: #b8c4b0; font-weight: 700; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.map-tab:hover { background: #2a342a; border-color: #5c7048; }
+.map-tab.is-active {
+  background: #3f5a2e; border-color: #8fbf5a; color: #f0f7e8;
+  box-shadow: 0 0 0 3px rgba(143,191,90,.2);
+}
+.map-tab:focus-visible { outline: 3px solid #ffb703; outline-offset: 2px; }
+
+/* ---------- Layout ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, .8fr);
+  gap: 16px; align-items: start;
+  margin-bottom: 20px;
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: #1b211d; border: 1px solid #2e3a30; border-radius: 14px;
+  padding: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.25);
+}
+.panel h2 { margin: 0 0 10px; font-size: 1.05rem; color: #c8d4b8; }
+
+/* ---------- Map surface with real image ---------- */
+.map-surface {
+  position: relative; width: 100%; aspect-ratio: 4/3;
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid #3a4a3a;
+  background-color: #0f140f;
+  user-select: none;
+}
+.map-image {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; /* чтобы карта не обрезалась */
+  display: block;
+  pointer-events: none; /* маркеры кликабельны, карта — нет */
+}
+.map-fallback {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: #6f8a60; font-size: .9rem; text-align: center; padding: 20px;
+  pointer-events: none;
+}
+.map-label {
+  position: absolute; left: 10px; bottom: 8px; font-size: .68rem;
+  color: #ffffffcc; letter-spacing: .1em; text-transform: uppercase;
+  pointer-events: none; z-index: 1; text-shadow: 0 1px 3px #000;
+}
+
+/* Markers */
+.marker {
+  position: absolute; transform: translate(-50%,-50%);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; cursor: pointer; z-index: 2;
+  border: 2px solid; font-size: .62rem; font-weight: 800;
+  transition: transform .12s, box-shadow .12s;
+}
+.marker:hover { transform: translate(-50%,-50%) scale(1.18); z-index: 5; }
+.marker:focus-visible { outline: 3px solid #ffb703; outline-offset: 2px; }
+
+/* Loot categories */
+.marker.loot { width: 26px; height: 26px; }
+.marker.loot.cat-weapon   { background: #3d2a1f; border-color: #b0763d; color: #f0c090; }
+.marker.loot.cat-ammo     { background: #2a2f1f; border-color: #8a9a3d; color: #dce8a8; }
+.marker.loot.cat-meds     { background: #1f2d2a; border-color: #3da08a; color: #a8e8d8; }
+.marker.loot.cat-food     { background: #2d2a1f; border-color: #a08a3d; color: #e8dca8; }
+.marker.loot.cat-electronics { background: #1f253d; border-color: #3d5ab0; color: #a8c0f0; }
+.marker.loot.cat-valuables { background: #3d2a3a; border-color: #b03d8a; color: #f0a8d8; }
+.marker.loot.cat-keys     { background: #2a1f2d; border-color: #8a3da0; color: #d8a8e8; }
+.marker.loot.cat-barter   { background: #1f3d24; border-color: #4a8a3d; color: #b8e8a8; }
+
+/* Extracts */
+.marker.extract { width: 34px; height: 34px; font-size: .6rem; }
+.marker.extract.status-open   { background: #1f3d24; border-color: #5cbf4a; color: #b8f0a8; }
+.marker.extract.status-used   { background: #3d3a1f; border-color: #bfb04a; color: #f0e8a8; box-shadow: 0 0 0 3px rgba(191,176,74,.25); }
+.marker.extract.status-closed { background: #3d1f1f; border-color: #bf4a4a; color: #f0a8a8; opacity: .8; }
+
+/* Tooltip */
+.marker .tip {
+  position: absolute; left: 50%; bottom: calc(100% + 6px);
+  transform: translateX(-50%) translateY(4px);
+  background: #0f140f; color: #d5e0c8; padding: 5px 9px; border-radius: 6px;
+  border: 1px solid #3a4a3a; font-size: .72rem; font-weight: 500;
+  white-space: nowrap; pointer-events: none; opacity: 0;
+  transition: opacity .12s, transform .12s; z-index: 20;
+}
+.marker:hover .tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- Legend ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 10px 0 0; font-size: .78rem; color: #8fa080; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid; display: inline-block; }
+.legend-dot.cat-weapon   { background: #3d2a1f; border-color: #b0763d; }
+.legend-dot.cat-ammo     { background: #2a2f1f; border-color: #8a9a3d; }
+.legend-dot.cat-meds     { background: #1f2d2a; border-color: #3da08a; }
+.legend-dot.cat-food     { background: #2d2a1f; border-color: #a08a3d; }
+.legend-dot.cat-electronics { background: #1f253d; border-color: #3d5ab0; }
+.legend-dot.cat-valuables { background: #3d2a3a; border-color: #b03d8a; }
+.legend-dot.cat-keys     { background: #2a1f2d; border-color: #8a3da0; }
+.legend-dot.cat-barter   { background: #1f3d24; border-color: #4a8a3d; }
+.legend-dot.extract-open   { background: #1f3d24; border-color: #5cbf4a; border-radius: 50%; }
+.legend-dot.extract-used   { background: #3d3a1f; border-color: #bfb04a; border-radius: 50%; }
+.legend-dot.extract-closed { background: #3d1f1f; border-color: #bf4a4a; border-radius: 50%; }
+
+/* ---------- Filters ---------- */
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 10px; align-items: end; }
+.filters label { display: block; font-size: .8rem; font-weight: 600; color: #8fa080; margin-bottom: 3px; }
+.filters select, .filters input[type="number"] {
+  padding: 7px 10px; border: 1px solid #3a4a3a; border-radius: 8px;
+  background: #0f140f; color: #d5e0c8; width: 100%;
+}
+.filters select:focus, .filters input:focus { outline: 2px solid #8fbf5a; outline-offset: 1px; }
+.filters .filter-group { flex: 1 1 140px; }
+.filters .btn-reset {
+  padding: 7px 12px; border: 1px solid #5c4a3a; border-radius: 8px;
+  background: #2a2018; color: #d4b898; font-weight: 600; cursor: pointer;
+}
+.filters .btn-reset:hover { background: #3a2c20; }
+
+/* ---------- Extract list ---------- */
+.extract-list { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.extract-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 11px; border: 1px solid #2e3a30; border-radius: 9px;
+  background: #151b16;
+}
+.extract-item.is-used { border-color: #6b5a2e; background: #1f1d14; }
+.extract-item.is-used .extract-name { text-decoration: line-through; color: #8a8060; }
+.extract-name { font-weight: 700; font-size: .88rem; }
+.extract-meta { font-size: .74rem; color: #7a8a70; }
+.extract-status {
+  white-space: nowrap; padding: 3px 8px; border-radius: 999px;
+  font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em;
+}
+.extract-status.open   { background: #1f3d24; color: #7ed46a; }
+.extract-status.used   { background: #3d3a1f; color: #d4c45a; }
+.extract-status.closed { background: #3d1f1f; color: #d45a5a; }
+
+.extract-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.btn-mini {
+  padding: 4px 9px; border-radius: 7px; border: 1px solid #3a4a3a;
+  background: #1d241f; color: #b8c4b0; font-size: .72rem; font-weight: 700;
+  cursor: pointer;
+}
+.btn-mini:hover { background: #2a342a; }
+.btn-mini.is-active { background: #3f5a2e; border-color: #8fbf5a; color: #e8f5d8; }
+
+/* ---------- Loot panel ---------- */
+.loot-panel .loot-grid { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
+.loot-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 10px; border: 1px solid #2e3a30; border-radius: 8px;
+  background: #151b16; font-size: .82rem;
+}
+.loot-row .loot-name { font-weight: 600; }
+.loot-row .loot-cat {
+  padding: 2px 7px; border-radius: 999px; font-size: .65rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.loot-cat.cat-weapon   { background: #3d2a1f; color: #f0c090; }
+.loot-cat.cat-ammo     { background: #2a2f1f; color: #dce8a8; }
+.loot-cat.cat-meds     { background: #1f2d2a; color: #a8e8d8; }
+.loot-cat.cat-food     { background: #2d2a1f; color: #e8dca8; }
+.loot-cat.cat-electronics { background: #1f253d; color: #a8c0f0; }
+.loot-cat.cat-valuables { background: #3d2a3a; color: #f0a8d8; }
+.loot-cat.cat-keys     { background: #2a1f2d; color: #d8a8e8; }
+.loot-cat.cat-barter   { background: #1f3d24; color: #b8e8a8; }
+
+/* ---------- Progress ---------- */
+.progress-bar {
+  height: 8px; border-radius: 999px; background: #2e3a30; overflow: hidden; margin: 8px 0 4px;
+}
+.progress-fill { height: 100%; background: linear-gradient(90deg, #5cbf4a, #bfb04a); border-radius: 999px; transition: width .25s; }
+.progress-text { font-size: .8rem; color: #8fa080; }
+
+/* ---------- Empty ---------- */
+.empty { padding: 14px; border-radius: 9px; background: #151b16; color: #7a8a70; text-align: center; font-size: .88rem; }
+
+/* ---------- Footer ---------- */
+.page-footer { margin-top: 16px; padding: 14px 0; border-top: 1px solid #2e3a30; color: #6f8060; font-size: .8rem; }
+</style>
+</head>
+<body>
+<header class="page-header">
+  <div class="container">
+    <p class="eyebrow">Учебный проект · Escape from Tarkov</p>
+    <h1>Карты лута и выходов</h1>
+    <p class="subtitle">
+      Реальные игровые карты. Отмечайте, какими выходами вы уже вышли, — прогресс сохраняется в этом браузере.
+    </p>
+    <p class="demo-note">
+      Учебное демо: изображения карт взяты из открытых фанатских источников. Координаты маркеров приблизительные.
+      Прогресс выходов хранится только в этом браузере.
+    </p>
+  </div>
+</header>
+
+<div class="container">
+  <p id="appMessage" class="app-message" role="status" aria-live="polite"></p>
+</div>
+
+<main class="container">
+  <div class="map-tabs" id="mapTabs" role="tablist"></div>
+
+  <div class="layout">
+    <section class="panel" aria-labelledby="mapTitle">
+      <h2 id="mapTitle">Схема карты</h2>
+      <div class="map-surface" id="mapSurface">
+        <img class="map-image" id="mapImage" alt="">
+        <div class="map-fallback" id="mapFallback" hidden>Изображение карты не загрузилось</div>
+        <div class="map-label" id="mapLabel">—</div>
+      </div>
+
+      <div class="filters" aria-label="Фильтры лута">
+        <div class="filter-group">
+          <label for="filterCat">Категория лута</label>
+          <select id="filterCat">
+            <option value="">Все категории</option>
+            <option value="cat-weapon">Оружие</option>
+            <option value="cat-ammo">Боеприпасы</option>
+            <option value="cat-meds">Медикаменты</option>
+            <option value="cat-food">Еда</option>
+            <option value="cat-electronics">Электроника</option>
+            <option value="cat-valuables">Ценности</option>
+            <option value="cat-keys">Ключи</option>
+            <option value="cat-barter">Бартер</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterSearch">Поиск по названию</label>
+          <input type="text" id="filterSearch" placeholder="например, LEDX">
+        </div>
+        <button type="button" class="btn-reset" id="resetFilters">Сбросить фильтры</button>
+      </div>
+
+      <p class="legend" aria-label="Легенда">
+        <span class="legend-item"><span class="legend-dot cat-weapon"></span> оружие</span>
+        <span class="legend-item"><span class="legend-dot cat-ammo"></span> патроны</span>
+        <span class="legend-item"><span class="legend-dot cat-meds"></span> медикаменты</span>
+        <span class="legend-item"><span class="legend-dot cat-food"></span> еда</span>
+        <span class="legend-item"><span class="legend-dot cat-electronics"></span> электроника</span>
+        <span class="legend-item"><span class="legend-dot cat-valuables"></span> ценности</span>
+        <span class="legend-item"><span class="legend-dot cat-keys"></span> ключи</span>
+        <span class="legend-item"><span class="legend-dot cat-barter"></span> бартер</span>
+        <span class="legend-item"><span class="legend-dot extract-open"></span> выход открыт</span>
+        <span class="legend-item"><span class="legend-dot extract-used"></span> вышли</span>
+      </p>
+    </section>
+
+    <aside style="display:flex; flex-direction:column; gap:16px;">
+      <section class="panel" aria-labelledby="extractsTitle">
+        <h2 id="extractsTitle">Выходы</h2>
+        <div class="progress-bar" aria-hidden="true"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <p class="progress-text" id="progressText">—</p>
+        <ul class="extract-list" id="extractList"></ul>
+      </section>
+
+      <section class="panel loot-panel" aria-labelledby="lootTitle">
+        <h2 id="lootTitle">Лут на карте</h2>
+        <div class="loot-grid" id="lootGrid"></div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<footer class="page-footer">
+  <div class="container">
+    Учебное демо: изображения карт принадлежат их авторам (Battlestate Games, фанатские проекты).
+    Прогресс выходов сохраняется в localStorage этого браузера.
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var STORAGE_KEY = 'eftMapProgress_v2';
+
+  // ---------------------------------------------------------------------------
+  // ДАННЫЕ
+  // ---------------------------------------------------------------------------
+
+  var LOOT_ITEMS = {
+    'cat-weapon': ['AK-74N','M4A1','AKM','SVD-S','DVL-10','MP5','M870','P226R','Makarov PM','Saiga-12K'],
+    'cat-ammo': ['5.45×39 БП','5.56×45 M855A1','7.62×39 БП','7.62×54R ЛПС','9×19 AP 6.3','12/70 дробь','.338 LM'],
+    'cat-meds': ['IFAK','Grizzly','Salewa','LEDX','Морфин','Пропитал','Бинт','Жгут','Аптечка AI-2','Стимулятор SJ6'],
+    'cat-food': ['Тушёнка','Сухари','Вода 0.6L','Сок «Сад»','Шоколад','Сгущёнка','Крекеры','Энергетик Hot Rod'],
+    'cat-electronics': ['GPU','CPU','Плата','Батарея','Кабель','Транзистор','Микросхема','Жёсткий диск','Флешка','SSD'],
+    'cat-valuables': ['Золотая цепь','Часы Roler','Кольцо','Слиток золота','Банкноты','Серьги','Браслет','Кулон'],
+    'cat-keys': ['Ключ от общаги','Ключ от санатория','Ключ от KIBA','Ключ от лаборатории','Ключ от сейфа','Ключ-карта'],
+    'cat-barter': ['Винтовки','Сахар','Спички','Мёд','Сухое топливо','Порох','Ткань','Проволока','Изолента','Клей']
+  };
+
+  var CAT_LABELS = {
+    'cat-weapon':'оружие','cat-ammo':'патроны','cat-meds':'медикаменты','cat-food':'еда',
+    'cat-electronics':'электроника','cat-valuables':'ценности','cat-keys':'ключи','cat-barter':'бартер'
+  };
+
+  // Карты: URL изображения + точки лута и выходы
+  var MAPS = [
+    {
+      id: 'customs',
+      name: 'Таможня',
+      label: 'CUSTOMS',
+      // Изображение с фанатской вики (Glory4Lyfe / MonkiMonkiMonk)
+      image:'https://raw.githubusercontent.com/daimaokang/tarkovdata/master/maps/Customs.svg',
+      loot: [
+        { cat:'cat-weapon', name:'Общага 3-й этаж', x:22, y:28 },
+        { cat:'cat-weapon', name:'Общага 2-й этаж', x:27, y:34 },
+        { cat:'cat-ammo', name:'Склад 4', x:68, y:22 },
+        { cat:'cat-ammo', name:'Заправка', x:48, y:60 },
+        { cat:'cat-meds', name:'Медичка', x:74, y:45 },
+        { cat:'cat-meds', name:'Санаторий', x:84, y:32 },
+        { cat:'cat-food', name:'Кухня общаги', x:18, y:42 },
+        { cat:'cat-food', name:'Ларёк', x:55, y:70 },
+        { cat:'cat-electronics', name:'Склад электроники', x:60, y:18 },
+        { cat:'cat-electronics', name:'Офис', x:35, y:55 },
+        { cat:'cat-valuables', name:'Сейф', x:80, y:60 },
+        { cat:'cat-keys', name:'Ключница', x:42, y:36 },
+        { cat:'cat-barter', name:'Бартерный ящик', x:30, y:72 }
+      ],
+      extracts: [
+        { name:'ZB-1011', side:'PMC', x:88, y:18, status:'open' },
+        { name:'Old Gas Station', side:'PMC', x:50, y:82, status:'open' },
+        { name:'Factory Far Corner', side:'Scav', x:12, y:78, status:'open' },
+        { name:'RUAF Roadblock', side:'PMC', x:78, y:70, status:'open' },
+        { name:"Smugglers' Bunker", side:'PMC', x:65, y:90, status:'closed' },
+        { name:'Scav Checkpoint', side:'Scav', x:38, y:88, status:'open' }
+      ]
+    },
+    {
+      id: 'woods',
+      name: 'Лес',
+      label: 'WOODS',
+      // Проверенная ссылка на изображение Woods v4 marked
+      image: 'https://raw.githubusercontent.com/daimaokang/tarkovdata/master/maps/Woods.svg',
+      loot: [
+        { cat:'cat-weapon', name:'Лесопилка', x:50, y:50 },
+        { cat:'cat-weapon', name:'USEC camp', x:72, y:28 },
+        { cat:'cat-ammo', name:'Снайперская скала', x:40, y:20 },
+        { cat:'cat-ammo', name:'Военная база', x:78, y:65 },
+        { cat:'cat-meds', name:'Медицинский лагерь', x:28, y:40 },
+        { cat:'cat-meds', name:'Лагерь у озера', x:62, y:72 },
+        { cat:'cat-food', name:'Домик лесника', x:20, y:68 },
+        { cat:'cat-food', name:'Палатки', x:82, y:48 },
+        { cat:'cat-electronics', name:'Радиовышка', x:58, y:18 },
+        { cat:'cat-valuables', name:'Схрон', x:35, y:82 },
+        { cat:'cat-keys', name:'Ключ от бункера', x:68, y:88 },
+        { cat:'cat-barter', name:'Ящик у лесопилки', x:46, y:62 }
+      ],
+      extracts: [
+        { name:'ZB-016', side:'PMC', x:80, y:20, status:'open' },
+        { name:'RUAF Gate', side:'PMC', x:72, y:78, status:'open' },
+        { name:'Outskirts', side:'PMC', x:18, y:30, status:'open' },
+        { name:'Bridge V-Ex', side:'PMC', x:88, y:55, status:'closed' },
+        { name:'Scav Bridge', side:'Scav', x:12, y:72, status:'open' },
+        { name:"Dead Man's Place", side:'Scav', x:45, y:90, status:'open' }
+      ]
+    },
+    {
+      id: 'interchange',
+      name: 'Развязка',
+      label: 'INTERCHANGE',
+      // Интерактивная базовая карта с вики (может быть .jpg/.webp — используем распространённый вариант)
+      image: 'https://raw.githubusercontent.com/daimaokang/tarkovdata/master/maps/Interchange.svg',
+      loot: [
+        { cat:'cat-weapon', name:'KIBA', x:42, y:38 },
+        { cat:'cat-weapon', name:'Оружейный магазин', x:58, y:45 },
+        { cat:'cat-ammo', name:'Спорттовары', x:30, y:58 },
+        { cat:'cat-meds', name:'Аптека', x:66, y:30 },
+        { cat:'cat-meds', name:'Медицинский склад', x:74, y:62 },
+        { cat:'cat-food', name:'Фудкорт', x:48, y:72 },
+        { cat:'cat-food', name:'Супермаркет', x:22, y:40 },
+        { cat:'cat-electronics', name:'Электроника', x:60, y:20 },
+        { cat:'cat-electronics', name:'Компьютерный магазин', x:36, y:26 },
+        { cat:'cat-valuables', name:'Ювелирный', x:78, y:38 },
+        { cat:'cat-keys', name:'Сейфовая комната', x:52, y:28 },
+        { cat:'cat-barter', name:'Склад', x:18, y:78 }
+      ],
+      extracts: [
+        { name:'Emercom Checkpoint', side:'Все', x:82, y:72, status:'open' },
+        { name:'Railway Exfil', side:'Все', x:88, y:30, status:'open' },
+        { name:'Power Station V-Ex', side:'PMC', x:12, y:48, status:'closed' },
+        { name:'Saferoom Exfil', side:'PMC', x:50, y:88, status:'open' },
+        { name:'Hole in the Fence', side:'PMC', x:68, y:82, status:'open' },
+        { name:'Scav Camp (Co-Op)', side:'Co-Op', x:25, y:18, status:'closed' }
+      ]
+    },
+    {
+      id: 'shoreline',
+      name: 'Берег',
+      label: 'SHORELINE',
+      // Изображение карты Shoreline (альтернативный источник)
+      image: 'https://raw.githubusercontent.com/daimaokang/tarkovdata/master/maps/Shoreline.svg',
+      loot: [
+        { cat:'cat-weapon', name:'Санаторий, оружейная', x:42, y:28 },
+        { cat:'cat-weapon', name:'Пирс', x:72, y:78 },
+        { cat:'cat-ammo', name:'Военный КПП', x:82, y:42 },
+        { cat:'cat-meds', name:'Санаторий, медблок', x:38, y:22 },
+        { cat:'cat-meds', name:'Лазарет', x:58, y:36 },
+        { cat:'cat-food', name:'Столовая', x:30, y:58 },
+        { cat:'cat-food', name:'Домики у пляжа', x:68, y:68 },
+        { cat:'cat-electronics', name:'Админ корпус', x:50, y:18 },
+        { cat:'cat-valuables', name:'Сейфы санатория', x:44, y:40 },
+        { cat:'cat-keys', name:'Ключ от номера', x:54, y:30 },
+        { cat:'cat-barter', name:'Склад у пирса', x:78, y:62 }
+      ],
+      extracts: [
+        { name:'Path to Lighthouse', side:'PMC', x:18, y:18, status:'open' },
+        { name:'Tunnel', side:'PMC', x:12, y:82, status:'open' },
+        { name:'Pier Boat', side:'PMC', x:78, y:88, status:'open' },
+        { name:'Railway Bridge', side:'PMC', x:88, y:52, status:'closed' },
+        { name:'Road to Customs', side:'Все', x:62, y:90, status:'open' },
+        { name:'Admin Basement', side:'Scav', x:40, y:70, status:'open' }
+      ]
+    }
+  ];
+
+  // ---------------------------------------------------------------------------
+  // СОСТОЯНИЕ
+  // ---------------------------------------------------------------------------
+  var state = {
+    activeMapId: MAPS[0].id,
+    filters: { cat: '', search: '' },
+    extractStatus: {}
+  };
+
+  // ---------------------------------------------------------------------------
+  // УТИЛИТЫ
+  // ---------------------------------------------------------------------------
+  function $(id) { return document.getElementById(id); }
+
+  function escapeHtml(v) {
+    return String(v).replace(/[&<>"']/g, function (ch) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch];
+    });
+  }
+
+  function setMessage(text, type) {
+    var el = $('appMessage');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'app-message' + (text ? ' is-' + (type || 'info') : '');
+  }
+
+  function getActiveMap() {
+    for (var i = 0; i < MAPS.length; i++) if (MAPS[i].id === state.activeMapId) return MAPS[i];
+    return MAPS[0];
+  }
+
+  // ---------------------------------------------------------------------------
+  // СОХРАНЕНИЕ / ЗАГРУЗКА
+  // ---------------------------------------------------------------------------
+  function saveProgress() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        version: 2,
+        extractStatus: state.extractStatus
+      }));
+      return true;
+    } catch (e) {
+      setMessage('Не удалось сохранить прогресс в браузере: хранилище недоступно.', 'err');
+      return false;
+    }
+  }
+
+  function loadProgress() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      if (!data || typeof data !== 'object' || typeof data.extractStatus !== 'object') throw new Error('bad');
+      var clean = {};
+      MAPS.forEach(function (map) {
+        var stored = data.extractStatus[map.id];
+        if (!stored || typeof stored !== 'object') return;
+        clean[map.id] = {};
+        map.extracts.forEach(function (ex) {
+          var s = stored[ex.name];
+          if (s === 'open' || s === 'used' || s === 'closed') clean[map.id][ex.name] = s;
+        });
+      });
+      state.extractStatus = clean;
+    } catch (e) {
+      state.extractStatus = {};
+      setMessage('Сохранённый прогресс повреждён и сброшен.', 'err');
+    }
+  }
+
+  function getExtractStatus(mapId, extractName, fallback) {
+    var mapStatus = state.extractStatus[mapId];
+    if (mapStatus && mapStatus[extractName]) return mapStatus[extractName];
+    return fallback || 'open';
+  }
+
+  function setExtractStatus(mapId, extractName, status) {
+    if (!state.extractStatus[mapId]) state.extractStatus[mapId] = {};
+    state.extractStatus[mapId][extractName] = status;
+    saveProgress();
+  }
+
+  // ---------------------------------------------------------------------------
+  // РЕНДЕР: ВКЛАДКИ КАРТ
+  // ---------------------------------------------------------------------------
+  function renderTabs() {
+    var container = $('mapTabs');
+    container.innerHTML = '';
+    MAPS.forEach(function (map) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'map-tab' + (map.id === state.activeMapId ? ' is-active' : '');
+      btn.textContent = map.name;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', map.id === state.activeMapId ? 'true' : 'false');
+      btn.addEventListener('click', function () {
+        if (state.activeMapId === map.id) return;
+        state.activeMapId = map.id;
+        setMessage('');
+        renderAll();
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // РЕНДЕР: СХЕМА С ИЗОБРАЖЕНИЕМ
+  // ---------------------------------------------------------------------------
+  function renderMapSurface() {
+    var map = getActiveMap();
+    var surface = $('mapSurface');
+
+    // Устанавливаем изображение
+    var img = $('mapImage');
+    var fallback = $('mapFallback');
+    img.onerror = function () {
+      img.style.display = 'none';
+      fallback.hidden = false;
+    };
+    img.onload = function () {
+      img.style.display = 'block';
+      fallback.hidden = true;
+    };
+    img.src = map.image;
+    img.alt = 'Карта: ' + map.name;
+
+    // Удаляем старые маркеры и пустые сообщения
+    surface.querySelectorAll('.marker, .empty').forEach(function (el) { el.remove(); });
+
+    $('mapLabel').textContent = map.label;
+
+    var filters = state.filters;
+    var visibleLoot = map.loot.filter(function (item) {
+      if (filters.cat && item.cat !== filters.cat) return false;
+      if (filters.search && item.name.toLowerCase().indexOf(filters.search.toLowerCase()) === -1) return false;
+      return true;
+    });
+
+    if (!visibleLoot.length && (filters.cat || filters.search)) {
+      var empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.style.position = 'absolute';
+      empty.style.left = '50%';
+      empty.style.top = '50%';
+      empty.style.transform = 'translate(-50%,-50%)';
+      empty.style.maxWidth = '80%';
+      empty.textContent = 'Нет лута, подходящего под фильтры';
+      surface.appendChild(empty);
+    }
+
+    // Луты
+    visibleLoot.forEach(function (item) {
+      var el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'marker loot ' + item.cat;
+      el.style.left = item.x + '%';
+      el.style.top = item.y + '%';
+      el.setAttribute('aria-label', item.name + ' — ' + (CAT_LABELS[item.cat] || item.cat));
+      el.innerHTML =
+        '<span class="tip">' + escapeHtml(item.name) + ' · ' + escapeHtml(CAT_LABELS[item.cat] || item.cat) + '</span>' +
+        (item.cat === 'cat-weapon' ? '🔫' :
+         item.cat === 'cat-ammo' ? '▮' :
+         item.cat === 'cat-meds' ? '+' :
+         item.cat === 'cat-food' ? '🍖' :
+         item.cat === 'cat-electronics' ? '⚡' :
+         item.cat === 'cat-valuables' ? '◆' :
+         item.cat === 'cat-keys' ? '🔑' : '▣');
+      surface.appendChild(el);
+    });
+
+    // Выходы
+    map.extracts.forEach(function (ex) {
+      var status = getExtractStatus(map.id, ex.name, ex.status);
+      var el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'marker extract status-' + status;
+      el.style.left = ex.x + '%';
+      el.style.top = ex.y + '%';
+      el.setAttribute('aria-label', ex.name + ', ' + ex.side + ', статус: ' + status);
+      el.innerHTML =
+        '<span class="tip">' + escapeHtml(ex.name) + ' · ' + escapeHtml(ex.side) + ' · ' + status + '</span>' +
+        (status === 'used' ? '✓' : status === 'closed' ? '✕' : '⇧');
+      el.addEventListener('click', function () {
+        cycleExtractStatus(map.id, ex.name, status);
+      });
+      surface.appendChild(el);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // ЦИКЛ СТАТУСА ВЫХОДА
+  // ---------------------------------------------------------------------------
+  function cycleExtractStatus(mapId, extractName, current) {
+    var next = current === 'open' ? 'used' : current === 'used' ? 'closed' : 'open';
+    setExtractStatus(mapId, extractName, next);
+
+    if (next === 'used') setMessage('Выход «' + extractName + '» отмечен как использованный. Прогресс сохранён.', 'ok');
+    else if (next === 'closed') setMessage('Выход «' + extractName + '» отмечен как закрытый.', 'info');
+    else setMessage('Выход «' + extractName + '» снова открыт.', 'info');
+
+    renderAll();
+  }
+
+  // ---------------------------------------------------------------------------
+  // РЕНДЕР: СПИСОК ВЫХОДОВ
+  // ---------------------------------------------------------------------------
+  function renderExtracts() {
+    var map = getActiveMap();
+    var list = $('extractList');
+    list.innerHTML = '';
+
+    map.extracts.forEach(function (ex) {
+      var status = getExtractStatus(map.id, ex.name, ex.status);
+      var li = document.createElement('li');
+      li.className = 'extract-item' + (status === 'used' ? ' is-used' : '');
+      li.innerHTML =
+        '<div style="min-width:0;">' +
+          '<div class="extract-name">' + escapeHtml(ex.name) + '</div>' +
+          '<div class="extract-meta">' + escapeHtml(ex.side) + '</div>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
+          '<span class="extract-status ' + status + '">' + (status === 'used' ? 'вышли' : status === 'closed' ? 'закрыт' : 'открыт') + '</span>' +
+          '<div class="extract-actions">' +
+            '<button type="button" class="btn-mini ' + (status === 'used' ? 'is-active' : '') + '" data-mark="used" data-ex="' + escapeHtml(ex.name) + '">✓</button>' +
+            '<button type="button" class="btn-mini ' + (status === 'open' ? 'is-active' : '') + '" data-mark="open" data-ex="' + escapeHtml(ex.name) + '">⇧</button>' +
+          '</div>' +
+        '</div>';
+      list.appendChild(li);
+    });
+
+    list.querySelectorAll('[data-mark]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var mapId = state.activeMapId;
+        var name = btn.dataset.ex;
+        var newStatus = btn.dataset.mark;
+        setExtractStatus(mapId, name, newStatus);
+        setMessage(newStatus === 'used' ? 'Выход «' + name + '» отмечен: вышли.' : 'Выход «' + name + '» снова открыт.', newStatus === 'used' ? 'ok' : 'info');
+        renderAll();
+      });
+    });
+
+    var total = map.extracts.length;
+    var used = map.extracts.filter(function (ex) {
+      return getExtractStatus(map.id, ex.name, ex.status) === 'used';
+    }).length;
+    var pct = total ? Math.round(used / total * 100) : 0;
+    $('progressFill').style.width = pct + '%';
+    $('progressText').textContent = 'Использовано выходов: ' + used + ' из ' + total + ' (' + pct + '%)';
+  }
+
+  // ---------------------------------------------------------------------------
+  // РЕНДЕР: СПИСОК ЛУТА
+  // ---------------------------------------------------------------------------
+  function renderLootList() {
+    var map = getActiveMap();
+    var container = $('lootGrid');
+    container.innerHTML = '';
+
+    var filters = state.filters;
+    var visible = map.loot.filter(function (item) {
+      if (filters.cat && item.cat !== filters.cat) return false;
+      if (filters.search && item.name.toLowerCase().indexOf(filters.search.toLowerCase()) === -1) return false;
+      return true;
+    });
+
+    if (!visible.length) {
+      container.innerHTML = '<p class="empty">Нет лута по выбранным фильтрам.</p>';
+      return;
+    }
+
+    visible.forEach(function (item) {
+      var row = document.createElement('div');
+      row.className = 'loot-row';
+      row.innerHTML =
+        '<span class="loot-name">' + escapeHtml(item.name) + '</span>' +
+        '<span class="loot-cat ' + item.cat + '">' + escapeHtml(CAT_LABELS[item.cat] || item.cat) + '</span>';
+      container.appendChild(row);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // ОБЩИЙ РЕНДЕР
+  // ---------------------------------------------------------------------------
+  function renderAll() {
+    renderTabs();
+    renderMapSurface();
+    renderExtracts();
+    renderLootList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // ФИЛЬТРЫ
+  // ---------------------------------------------------------------------------
+  function onFilterChange() {
+    state.filters.cat = $('filterCat').value;
+    state.filters.search = $('filterSearch').value.trim();
+    renderMapSurface();
+    renderLootList();
+  }
+
+  function resetFilters() {
+    $('filterCat').value = '';
+    $('filterSearch').value = '';
+    state.filters = { cat: '', search: '' };
+    setMessage('');
+    renderAll();
+  }
+
+  // ---------------------------------------------------------------------------
+  // ИНИЦИАЛИЗАЦИЯ
+  // ---------------------------------------------------------------------------
+  function init() {
+    loadProgress();
+    $('filterCat').addEventListener('change', onFilterChange);
+    $('filterSearch').addEventListener('input', onFilterChange);
+    $('resetFilters').addEventListener('click', resetFilters);
+    renderAll();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
